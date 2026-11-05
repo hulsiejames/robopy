@@ -1,9 +1,4 @@
-"""Styled Robocopy Transfer Manager for Windows.
-
-Requires: customtkinter
-Install:  py -m pip install customtkinter
-Run:      py robocopy_transfer_manager_styled.py
-"""
+"""Styled Robocopy Transfer Manager for Windows."""
 
 from __future__ import annotations
 
@@ -20,39 +15,32 @@ import customtkinter as ctk
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
-
-# POC-inspired palette
 BG = "#020617"
 PANEL = "#0f172a"
-PANEL_DARK = "#071020"
+DARK = "#071020"
 FIELD = "#172033"
 BORDER = "#273653"
 TEXT = "#f8fafc"
 MUTED = "#9fb4d0"
 CYAN = "#06d7f5"
 CYAN_HOVER = "#22e2fa"
-TEAL_PANEL = "#082f35"
+TEAL = "#082f35"
 TEAL_BORDER = "#0f766e"
 TEAL_TEXT = "#45f0d0"
 AMBER = "#facc15"
 BLACK = "#000000"
-DANGER = "#f59e0b"
-
-SUCCESS_MAX = 7
 DESTRUCTIVE = {"Move files", "Move tree", "Mirror"}
 
 
 class TransferManager(ctk.CTk):
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
         self.title("Robocopy Transfer Manager")
         self.geometry("1180x900")
         self.minsize(1000, 760)
         self.configure(fg_color=BG)
-
-        self.process: subprocess.Popen[str] | None = None
-        self.events: queue.Queue[tuple[str, object]] = queue.Queue()
-
+        self.process = None
+        self.events = queue.Queue()
         self.source = ctk.StringVar(value=r"C:\Work\Source")
         self.destination = ctk.StringVar(value=r"D:\Work\Destination")
         self.operation = ctk.StringVar(value="Copy files and folders")
@@ -70,24 +58,36 @@ class TransferManager(ctk.CTk):
         self.exclude_dirs = ctk.StringVar(value=".git __pycache__")
         self.command = ctk.StringVar()
         self.status = ctk.StringVar(value="Ready")
-
         self._build()
-        self._bind_vars()
+        self._bind()
         self._refresh()
-        self.after(100, self._poll_events)
+        self.after(100, self._poll)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
-    def _build(self) -> None:
+    def _panel(self, parent):
+        return ctk.CTkFrame(
+            parent, fg_color=PANEL, border_width=1, border_color=BORDER, corner_radius=14
+        )
+
+    def _entry(self, parent, var):
+        return ctk.CTkEntry(
+            parent,
+            textvariable=var,
+            height=34,
+            fg_color=FIELD,
+            border_color=BORDER,
+            text_color=TEXT,
+            font=("Cascadia Mono", 11),
+        )
+
+    def _build(self):
         shell = ctk.CTkScrollableFrame(self, fg_color=BG, corner_radius=0)
         shell.pack(fill="both", expand=True)
         shell.grid_columnconfigure(0, weight=1)
-
         page = ctk.CTkFrame(shell, fg_color="transparent", width=1040)
         page.grid(row=0, column=0, padx=34, pady=(14, 30), sticky="nsew")
         page.grid_columnconfigure(0, weight=5)
         page.grid_columnconfigure(1, weight=3)
-
-        # Header
         header = ctk.CTkFrame(page, fg_color="transparent")
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 16))
         header.grid_columnconfigure(0, weight=1)
@@ -99,12 +99,12 @@ class TransferManager(ctk.CTk):
             text="Build safe, repeatable copy, move and mirror jobs with a live command preview and streamed output.",
             font=("Segoe UI", 12),
             text_color=MUTED,
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ).grid(row=1, column=0, sticky="w")
         buttons = ctk.CTkFrame(header, fg_color="transparent")
         buttons.grid(row=0, column=1, rowspan=2, sticky="e")
         ctk.CTkButton(
             buttons,
-            text="↶   Reset",
+            text="↶  Reset",
             width=92,
             height=34,
             fg_color="transparent",
@@ -115,7 +115,7 @@ class TransferManager(ctk.CTk):
         ).pack(side="left", padx=(0, 10))
         self.run_button = ctk.CTkButton(
             buttons,
-            text="▷   Preview job",
+            text="▷  Preview job",
             width=130,
             height=34,
             fg_color=CYAN,
@@ -125,22 +125,20 @@ class TransferManager(ctk.CTk):
         )
         self.run_button.pack(side="left")
 
-        # Setup panel
         setup = self._panel(page)
         setup.grid(row=1, column=0, sticky="nsew", padx=(0, 9))
         setup.grid_columnconfigure((0, 1), weight=1)
         ctk.CTkLabel(
             setup, text="▱  Transfer setup", font=("Segoe UI", 15, "bold"), text_color=TEXT
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=22, pady=(20, 17))
-        self._field(setup, "Source path", self.source, 1, 0, self._browse_source)
-        self._field(
+        self._path_field(setup, "Source path", self.source, 1, 0, self._browse_source)
+        self._path_field(
             setup, "Destination path", self.destination, 1, 1, self._browse_destination
         )
-
         ctk.CTkLabel(
             setup, text="Operation", font=("Segoe UI", 11, "bold"), text_color=TEXT
         ).grid(row=3, column=0, sticky="w", padx=(22, 8), pady=(12, 4))
-        self.operation_menu = ctk.CTkOptionMenu(
+        ctk.CTkOptionMenu(
             setup,
             variable=self.operation,
             values=["Copy files and folders", "Move files", "Move tree", "Mirror"],
@@ -151,44 +149,39 @@ class TransferManager(ctk.CTk):
             dropdown_fg_color=FIELD,
             command=lambda _: self._refresh(),
             height=34,
-        )
-        self.operation_menu.grid(row=4, column=0, sticky="ew", padx=(22, 8))
+        ).grid(row=4, column=0, sticky="ew", padx=(22, 8))
         ctk.CTkLabel(
             setup, text="File pattern", font=("Segoe UI", 11, "bold"), text_color=TEXT
         ).grid(row=3, column=1, sticky="w", padx=(8, 22), pady=(12, 4))
         self._entry(setup, self.pattern).grid(row=4, column=1, sticky="ew", padx=(8, 22))
-
         tabs = ctk.CTkTabview(
             setup,
             fg_color="transparent",
-            segmented_button_fg_color=PANEL_DARK,
+            segmented_button_fg_color=DARK,
             segmented_button_selected_color=FIELD,
             segmented_button_selected_hover_color=FIELD,
-            segmented_button_unselected_color=PANEL_DARK,
+            segmented_button_unselected_color=DARK,
             segmented_button_unselected_hover_color=FIELD,
             text_color=TEXT,
             height=190,
         )
         tabs.grid(row=5, column=0, columnspan=2, sticky="ew", padx=18, pady=(15, 14))
         common = tabs.add("Common")
-        performance = tabs.add("Performance")
+        perf = tabs.add("Performance")
         filters = tabs.add("Filters")
         common.grid_columnconfigure((0, 1), weight=1)
-        checks = [
-            ("Include subdirectories", self.subdirs),
-            ("Include empty directories", self.empty_dirs),
-            ("Restart interrupted copies", self.restartable),
-            ("Preserve ACLs and ownership", self.security),
-            ("Dry run, change nothing", self.dry_run),
-            ("Unbuffered I/O for large files", self.unbuffered),
-        ]
-        for i, (label, var) in enumerate(checks):
+        for i, (label, var) in enumerate(
+            [
+                ("Include subdirectories", self.subdirs),
+                ("Include empty directories", self.empty_dirs),
+                ("Restart interrupted copies", self.restartable),
+                ("Preserve ACLs and ownership", self.security),
+                ("Dry run, change nothing", self.dry_run),
+                ("Unbuffered I/O for large files", self.unbuffered),
+            ]
+        ):
             box = ctk.CTkFrame(
-                common,
-                fg_color=PANEL_DARK,
-                border_width=1,
-                border_color=BORDER,
-                corner_radius=11,
+                common, fg_color=DARK, border_width=1, border_color=BORDER, corner_radius=11
             )
             box.grid(row=i // 2, column=i % 2, sticky="ew", padx=5, pady=5)
             ctk.CTkCheckBox(
@@ -202,80 +195,88 @@ class TransferManager(ctk.CTk):
                 font=("Segoe UI", 11),
                 command=self._refresh,
             ).pack(anchor="w", padx=11, pady=10)
-
-        performance.grid_columnconfigure((0, 1, 2), weight=1)
-        self._small_field(performance, "Threads, 1 to 128", self.threads, 0)
-        self._small_field(performance, "Retries", self.retries, 1)
-        self._small_field(performance, "Wait between retries, sec", self.wait, 2)
+        perf.grid_columnconfigure((0, 1, 2), weight=1)
+        for col, (label, var) in enumerate(
+            [
+                ("Threads, 1 to 128", self.threads),
+                ("Retries", self.retries),
+                ("Wait between retries, sec", self.wait),
+            ]
+        ):
+            ctk.CTkLabel(
+                perf, text=label, text_color=TEXT, font=("Segoe UI", 11, "bold")
+            ).grid(row=0, column=col, sticky="w", padx=7, pady=(12, 4))
+            self._entry(perf, var).grid(row=1, column=col, sticky="ew", padx=7)
         filters.grid_columnconfigure(0, weight=1)
-        self._filter_field(filters, "Exclude files, space separated", self.exclude_files, 0)
-        self._filter_field(
-            filters, "Exclude directories, space separated", self.exclude_dirs, 2
-        )
+        for row, (label, var) in enumerate(
+            [
+                ("Exclude files, space separated", self.exclude_files),
+                ("Exclude directories, space separated", self.exclude_dirs),
+            ]
+        ):
+            ctk.CTkLabel(
+                filters, text=label, text_color=TEXT, font=("Segoe UI", 11, "bold")
+            ).grid(row=row * 2, column=0, sticky="w", padx=7, pady=(8, 4))
+            self._entry(filters, var).grid(row=row * 2 + 1, column=0, sticky="ew", padx=7)
 
-        # Safety panel
         safety = self._panel(page)
         safety.grid(row=1, column=1, sticky="nsew", padx=(9, 0))
         ctk.CTkLabel(
             safety, text="Safety and status", font=("Segoe UI", 15, "bold"), text_color=TEXT
         ).pack(anchor="w", padx=22, pady=(20, 20))
-        self._info_box(
+        self._info(
             safety,
             "◉  Recommended defaults",
             "Restartable mode, 16 threads, 3 retries, 5 second wait and a dry run before execution.",
-            TEAL_PANEL,
+            TEAL,
             TEAL_BORDER,
             TEAL_TEXT,
         )
-        self._info_box(
+        self._info(
             safety,
             "⚠  Exit-code handling",
-            "The desktop backend treats Robocopy codes 0 to 7 as non-fatal outcomes and 8 or above as failures.",
-            PANEL_DARK,
+            "Robocopy codes 0 to 7 are non-fatal; 8 or above indicates failure.",
+            DARK,
             BORDER,
             AMBER,
         )
-        self._info_box(
+        self._info(
             safety,
             "Archive note",
-            "Robocopy moves ZIP files as files. Extracting or creating archives should be a separate optional step using Python's zipfile module.",
-            PANEL_DARK,
+            "A ZIP can be selected as a single source file. Robocopy copies the archive itself; it does not extract it.",
+            DARK,
             BORDER,
             TEXT,
         )
-        self.danger_label = ctk.CTkLabel(
+        self.danger = ctk.CTkLabel(
             safety,
             text="",
             wraplength=300,
             justify="left",
             font=("Segoe UI", 11, "bold"),
-            text_color=DANGER,
+            text_color="#f59e0b",
         )
-        self.danger_label.pack(anchor="w", padx=22, pady=(4, 18))
+        self.danger.pack(anchor="w", padx=22, pady=(4, 18))
 
-        # Command panel
-        cmd_panel = self._panel(page)
-        cmd_panel.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(16, 0))
-        cmd_panel.grid_columnconfigure(0, weight=1)
+        cmd = self._panel(page)
+        cmd.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(16, 0))
+        cmd.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
-            cmd_panel,
-            text="Generated CMD command",
-            font=("Segoe UI", 15, "bold"),
-            text_color=TEXT,
+            cmd, text="Generated CMD command", font=("Segoe UI", 15, "bold"), text_color=TEXT
         ).grid(row=0, column=0, sticky="w", padx=22, pady=(20, 7))
         ctk.CTkButton(
-            cmd_panel,
-            text="▣   Copy",
+            cmd,
+            text="▣  Copy",
             width=130,
             height=30,
             fg_color=FIELD,
             hover_color=BORDER,
             border_width=1,
             border_color=BORDER,
-            command=self._copy_command,
+            command=self._copy,
         ).grid(row=1, column=0, sticky="w", padx=22)
         self.command_box = ctk.CTkTextbox(
-            cmd_panel,
+            cmd,
             height=54,
             fg_color=BLACK,
             border_width=1,
@@ -286,17 +287,14 @@ class TransferManager(ctk.CTk):
             wrap="none",
         )
         self.command_box.grid(row=2, column=0, sticky="ew", padx=22, pady=(16, 20))
-
-        # Output panel
-        output_panel = self._panel(page)
-        output_panel.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
-        output_panel.grid_columnconfigure(0, weight=1)
-        output_panel.grid_rowconfigure(1, weight=1)
+        out = self._panel(page)
+        out.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
+        out.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
-            output_panel, text="Live output", font=("Segoe UI", 15, "bold"), text_color=TEXT
+            out, text="Live output", font=("Segoe UI", 15, "bold"), text_color=TEXT
         ).grid(row=0, column=0, sticky="w", padx=22, pady=(20, 10))
         self.output = ctk.CTkTextbox(
-            output_panel,
+            out,
             height=210,
             fg_color=BLACK,
             border_width=1,
@@ -309,13 +307,11 @@ class TransferManager(ctk.CTk):
         self.output.grid(row=1, column=0, sticky="nsew", padx=22)
         self.output.insert(
             "end",
-            "Ready. Review the generated command before running it.\nDry run is enabled by default, so no files will be changed.\n",
+            "Ready. Review the generated command before running it.\nDry run is enabled by default.\n",
         )
-        footer = ctk.CTkFrame(output_panel, fg_color="transparent")
+        footer = ctk.CTkFrame(out, fg_color="transparent")
         footer.grid(row=2, column=0, sticky="ew", padx=22, pady=(10, 17))
-        ctk.CTkLabel(
-            footer, textvariable=self.status, text_color=MUTED, font=("Segoe UI", 11)
-        ).pack(side="left")
+        ctk.CTkLabel(footer, textvariable=self.status, text_color=MUTED).pack(side="left")
         ctk.CTkButton(
             footer,
             text="Clear output",
@@ -335,35 +331,17 @@ class TransferManager(ctk.CTk):
         )
         self.cancel_button.pack(side="right", padx=8)
 
-    @staticmethod
-    def _panel(parent):
-        return ctk.CTkFrame(
-            parent, fg_color=PANEL, border_width=1, border_color=BORDER, corner_radius=14
-        )
-
-    @staticmethod
-    def _entry(parent, variable):
-        return ctk.CTkEntry(
-            parent,
-            textvariable=variable,
-            height=34,
-            fg_color=FIELD,
-            border_color=BORDER,
-            text_color=TEXT,
-            font=("Cascadia Mono", 11),
-        )
-
-    def _field(self, parent, label, variable, row, col, browse) -> None:
-        padx = (22, 8) if col == 0 else (8, 22)
+    def _path_field(self, parent, label, var, row, col, browse):
+        pad = (22, 8) if col == 0 else (8, 22)
         ctk.CTkLabel(parent, text=label, font=("Segoe UI", 11, "bold"), text_color=TEXT).grid(
-            row=row, column=col, sticky="w", padx=padx
+            row=row, column=col, sticky="w", padx=pad
         )
-        holder = ctk.CTkFrame(parent, fg_color="transparent")
-        holder.grid(row=row + 1, column=col, sticky="ew", padx=padx, pady=(4, 0))
-        holder.grid_columnconfigure(0, weight=1)
-        self._entry(holder, variable).grid(row=0, column=0, sticky="ew")
+        h = ctk.CTkFrame(parent, fg_color="transparent")
+        h.grid(row=row + 1, column=col, sticky="ew", padx=pad, pady=(4, 0))
+        h.grid_columnconfigure(0, weight=1)
+        self._entry(h, var).grid(row=0, column=0, sticky="ew")
         ctk.CTkButton(
-            holder,
+            h,
             text="…",
             width=36,
             height=34,
@@ -374,20 +352,7 @@ class TransferManager(ctk.CTk):
             command=browse,
         ).grid(row=0, column=1, padx=(6, 0))
 
-    def _small_field(self, parent, label, variable, col) -> None:
-        ctk.CTkLabel(parent, text=label, text_color=TEXT, font=("Segoe UI", 11, "bold")).grid(
-            row=0, column=col, sticky="w", padx=7, pady=(12, 4)
-        )
-        self._entry(parent, variable).grid(row=1, column=col, sticky="ew", padx=7)
-
-    def _filter_field(self, parent, label, variable, row) -> None:
-        ctk.CTkLabel(parent, text=label, text_color=TEXT, font=("Segoe UI", 11, "bold")).grid(
-            row=row, column=0, sticky="w", padx=7, pady=(8, 4)
-        )
-        self._entry(parent, variable).grid(row=row + 1, column=0, sticky="ew", padx=7)
-
-    @staticmethod
-    def _info_box(parent, title, body, color, border, title_color) -> None:
+    def _info(self, parent, title, body, color, border, title_color):
         box = ctk.CTkFrame(
             parent, fg_color=color, border_width=1, border_color=border, corner_radius=12
         )
@@ -404,8 +369,8 @@ class TransferManager(ctk.CTk):
             font=("Segoe UI", 11),
         ).pack(anchor="w", padx=14, pady=(0, 14))
 
-    def _bind_vars(self) -> None:
-        for var in (
+    def _bind(self):
+        for v in (
             self.source,
             self.destination,
             self.pattern,
@@ -421,29 +386,62 @@ class TransferManager(ctk.CTk):
             self.exclude_files,
             self.exclude_dirs,
         ):
-            var.trace_add("write", lambda *_: self._refresh())
+            v.trace_add("write", lambda *_: self._refresh())
 
-    def _browse_source(self) -> None:
-        value = filedialog.askdirectory(title="Select source folder")
-        if value:
-            self.source.set(value)
+    def _normalised_source(self):
+        source = Path(self.source.get().strip())
+        pattern = self.pattern.get().strip() or "*.*"
+        return (
+            (source.parent, source.name, True)
+            if source.is_file()
+            else (source, pattern, False)
+        )
 
-    def _browse_destination(self) -> None:
-        value = filedialog.askdirectory(title="Select destination folder")
-        if value:
-            self.destination.set(value)
+    def _browse_source(self):
+        file_mode = messagebox.askyesnocancel(
+            "Select source type",
+            "Yes: select one file, including a ZIP.\n\nNo: select a folder.\n\nCancel: return.",
+        )
+        if file_mode is None:
+            return
+        if file_mode:
+            selected = filedialog.askopenfilename(
+                title="Select source file",
+                filetypes=[
+                    ("All files", "*.*"),
+                    ("ZIP archives", "*.zip"),
+                    ("CSV files", "*.csv"),
+                ],
+            )
+            if selected:
+                self.source.set(selected)
+                self.pattern.set(Path(selected).name)
+        else:
+            selected = filedialog.askdirectory(title="Select source folder")
+            if selected:
+                self.source.set(selected)
+                self.pattern.set("*.*")
 
-    def _args(self) -> list[str]:
-        args = [
-            "robocopy",
-            self.source.get().strip(),
-            self.destination.get().strip(),
-            self.pattern.get().strip() or "*.*",
-        ]
+    def _browse_destination(self):
+        selected = filedialog.askdirectory(title="Select destination folder")
+        if selected:
+            self.destination.set(selected)
+
+    @staticmethod
+    def _num(var, default, low, high):
+        try:
+            value = int(var.get())
+        except ValueError:
+            value = default
+        return min(max(value, low), high)
+
+    def _args(self):
+        source, pattern, single = self._normalised_source()
+        args = ["robocopy", str(source), self.destination.get().strip(), pattern]
         op = self.operation.get()
         if op == "Mirror":
             args.append("/MIR")
-        elif self.subdirs.get():
+        elif self.subdirs.get() and not single:
             args.append("/E" if self.empty_dirs.get() else "/S")
         if op == "Move files":
             args.append("/MOV")
@@ -457,82 +455,79 @@ class TransferManager(ctk.CTk):
             args.extend(["/COPYALL", "/DCOPY:DAT"])
         args.extend(
             [
-                f"/MT:{self._int(self.threads, 16, 1, 128)}",
-                f"/R:{self._int(self.retries, 3, 0, 1000)}",
-                f"/W:{self._int(self.wait, 5, 0, 3600)}",
+                f"/MT:{self._num(self.threads, 16, 1, 128)}",
+                f"/R:{self._num(self.retries, 3, 0, 1000)}",
+                f"/W:{self._num(self.wait, 5, 0, 3600)}",
             ]
         )
         if self.exclude_files.get().strip():
             args.extend(["/XF", *shlex.split(self.exclude_files.get(), posix=False)])
-        if self.exclude_dirs.get().strip():
+        if self.exclude_dirs.get().strip() and not single:
             args.extend(["/XD", *shlex.split(self.exclude_dirs.get(), posix=False)])
         args.extend(["/ETA", "/BYTES"])
         if self.dry_run.get():
             args.append("/L")
         return args
 
-    @staticmethod
-    def _int(var, default, minimum, maximum):
-        try:
-            value = int(var.get())
-        except ValueError:
-            value = default
-        return min(max(value, minimum), maximum)
-
-    def _refresh(self) -> None:
+    def _refresh(self):
         command = subprocess.list2cmdline(self._args())
         self.command.set(command)
         if hasattr(self, "command_box"):
             self.command_box.delete("1.0", "end")
             self.command_box.insert("1.0", command)
-        self.run_button.configure(
-            text="▷   Preview job" if self.dry_run.get() else "▷   Run job"
-        )
-        op = self.operation.get()
-        self.danger_label.configure(
-            text=(
-                "⚠ Destructive mode selected. Preview first."
-                if op in {"Move files", "Move tree", "Mirror"}
+        if hasattr(self, "run_button"):
+            self.run_button.configure(
+                text="▷  Preview job" if self.dry_run.get() else "▷  Run job"
+            )
+        if hasattr(self, "danger"):
+            self.danger.configure(
+                text="⚠ Destructive mode selected. Preview first."
+                if self.operation.get() in DESTRUCTIVE
                 else ""
             )
-        )
 
-    def _validate(self) -> bool:
+    def _validate(self):
         if os.name != "nt" or shutil.which("robocopy") is None:
             messagebox.showerror(
-                "Robocopy unavailable",
-                "This application requires Windows and robocopy.exe on PATH.",
+                "Robocopy unavailable", "Windows and robocopy.exe are required."
             )
             return False
-        src, dst = Path(self.source.get()), Path(self.destination.get())
-        if not src.is_dir():
-            messagebox.showwarning("Invalid source", f"Source folder does not exist:\n{src}")
+        raw = Path(self.source.get().strip())
+        dst_text = self.destination.get().strip()
+        if not raw.exists():
+            messagebox.showwarning("Invalid source", f"The source does not exist:\n{raw}")
             return False
-        if not self.destination.get().strip() or src.resolve() == dst.resolve():
+        if not dst_text:
+            messagebox.showwarning("Invalid destination", "Choose a destination folder.")
+            return False
+        src, _, single = self._normalised_source()
+        dst = Path(dst_text)
+        if self.operation.get() == "Mirror" and single:
             messagebox.showwarning(
-                "Invalid destination", "Choose a destination different from the source."
+                "Invalid operation", "Mirror requires a source folder, not one file."
             )
             return False
         try:
-            if src.resolve() in dst.resolve().parents:
+            if src.resolve() == dst.resolve():
+                messagebox.showwarning(
+                    "Invalid destination", "Source and destination must differ."
+                )
+                return False
+            if not single and src.resolve() in dst.resolve().parents:
                 messagebox.showwarning(
                     "Unsafe destination", "Destination cannot be inside the source folder."
                 )
                 return False
         except OSError:
             pass
-        if not self.dry_run.get() and self.operation.get() in {
-            "Move files",
-            "Move tree",
-            "Mirror",
-        }:
+        if not self.dry_run.get() and self.operation.get() in DESTRUCTIVE:
             return messagebox.askyesno(
                 "Confirm destructive job",
                 "This job can delete files. Continue with the live run?",
             )
         return True
 
-    def _start(self) -> None:
+    def _start(self):
         if self.process is not None or not self._validate():
             return
         args = self._args()
@@ -543,7 +538,7 @@ class TransferManager(ctk.CTk):
         self.cancel_button.configure(state="normal")
         threading.Thread(target=self._worker, args=(args,), daemon=True).start()
 
-    def _worker(self, args) -> None:
+    def _worker(self, args):
         try:
             self.process = subprocess.Popen(
                 args,
@@ -555,8 +550,7 @@ class TransferManager(ctk.CTk):
                 bufsize=1,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            assert self.process.stdout
-            for line in self.process.stdout:
+            for line in self.process.stdout or ():
                 self.events.put(("line", line))
             self.events.put(("done", self.process.wait()))
         except Exception as exc:
@@ -564,7 +558,7 @@ class TransferManager(ctk.CTk):
         finally:
             self.process = None
 
-    def _poll_events(self) -> None:
+    def _poll(self):
         try:
             while True:
                 kind, value = self.events.get_nowait()
@@ -575,37 +569,37 @@ class TransferManager(ctk.CTk):
                     code = int(value)
                     self.status.set(
                         f"Completed, exit code {code}."
-                        if code <= SUCCESS_MAX
+                        if code <= 7
                         else f"Failed, exit code {code}."
                     )
-                    if code > SUCCESS_MAX:
+                    self._idle()
+                    if code > 7:
                         messagebox.showerror(
                             "Robocopy failed", f"Robocopy returned exit code {code}."
                         )
-                    self._idle()
                 else:
-                    messagebox.showerror("Execution error", str(value))
                     self.status.set("Execution failed.")
                     self._idle()
+                    messagebox.showerror("Execution error", str(value))
         except queue.Empty:
             pass
-        self.after(100, self._poll_events)
+        self.after(100, self._poll)
 
-    def _cancel(self) -> None:
+    def _idle(self):
+        self.run_button.configure(state="normal")
+        self.cancel_button.configure(state="disabled")
+
+    def _cancel(self):
         if self.process and self.process.poll() is None:
             self.process.terminate()
             self.status.set("Cancellation requested...")
 
-    def _idle(self) -> None:
-        self.run_button.configure(state="normal")
-        self.cancel_button.configure(state="disabled")
-
-    def _copy_command(self) -> None:
+    def _copy(self):
         self.clipboard_clear()
         self.clipboard_append(self.command.get())
         self.status.set("Command copied.")
 
-    def _reset(self) -> None:
+    def _reset(self):
         self.operation.set("Copy files and folders")
         self.pattern.set("*.*")
         self.subdirs.set(True)
@@ -621,11 +615,9 @@ class TransferManager(ctk.CTk):
         self.exclude_dirs.set(".git __pycache__")
         self.status.set("Settings reset.")
 
-    def _close(self) -> None:
+    def _close(self):
         if self.process and self.process.poll() is None:
-            if not messagebox.askyesno(
-                "Job running", "Cancel the active Robocopy job and close?"
-            ):
+            if not messagebox.askyesno("Job running", "Cancel the active job and close?"):
                 return
             self.process.terminate()
         self.destroy()
