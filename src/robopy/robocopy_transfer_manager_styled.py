@@ -59,7 +59,7 @@ class TransferManager(ctk.CTk):
         self.command = ctk.StringVar()
         self.status = ctk.StringVar(value="Ready")
         self._build()
-        self._bind()
+        self._bind_vars()
         self._refresh()
         self.after(100, self._poll)
         self.protocol("WM_DELETE_WINDOW", self._close)
@@ -369,7 +369,7 @@ class TransferManager(ctk.CTk):
             font=("Segoe UI", 11),
         ).pack(anchor="w", padx=14, pady=(0, 14))
 
-    def _bind(self):
+    def _bind_vars(self):
         for v in (
             self.source,
             self.destination,
